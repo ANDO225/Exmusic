@@ -14,12 +14,16 @@
   --text:#d9d2f0;--text2:#9a90c0;--text3:#5f5680;--white:#f3efff;
   --accent2:#22d3ee;
   --r:14px;--ph:88px;
+  --player-glass:rgba(19,16,32,.62);
+  --player-glass-border:rgba(255,255,255,.08);
 }
 :root[data-theme="light"]{
   --bg:#f6f4ff;--bg2:#ffffff;--bg3:#efeaff;--bg4:#e3daff;--bg5:#d6c8ff;
   --y:#6a2fc9;--yl:#7c3ce0;--yd:#5a26ad;--ym:#6a2fc9;--ymm:#c9b8f0;
   --text:#2d2350;--text2:#544777;--text3:#665391;--white:#201638;
   --accent2:#0891b2;
+  --player-glass:rgba(255,255,255,.62);
+  --player-glass-border:rgba(255,255,255,.5);
 }
 input:hover{
   cursor: pointer;
@@ -66,7 +70,9 @@ input,textarea{font-family:inherit}
   background:#fff;border-radius:24px;
   overflow:hidden;box-shadow:0 32px 80px rgba(0,0,0,.6);
   position:relative;min-height:600px;
+  transition:max-width .35s ease, min-height .35s ease;
 }
+.auth-card.reg-wide{max-width:760px;min-height:480px}
 .auth-close{
   position:absolute;top:14px;right:14px;z-index:5;
   width:28px;height:28px;border-radius:50%;
@@ -127,26 +133,39 @@ input,textarea{font-family:inherit}
 .auth-error{color:#c0392b;font-size:12px;margin:-4px 0 10px;min-height:14px;font-weight:600}
 .auth-hint{font-size:11px;color:#888;margin-top:10px;text-align:center}
 
-/* Sign-up panel */
+/* Sign-up panel — mise en page façon "carte Registration" (split horizontal + courbe) */
 .signup-panel{
   background:#fff;
-  display:flex;flex-direction:column;
+  display:flex;flex-direction:row;
   transform:translateY(100%);
   z-index:1;
 }
 .signup-panel.slide-up{transform:translateY(0)}
 
-.signup-body{padding:26px 32px 0;flex:1;overflow-y:auto}
-.signup-body h3{font-size:24px;font-weight:800;color:#111;margin-bottom:16px}
+.signup-body{padding:34px 30px;flex:1 1 56%;overflow-y:auto;text-align:left;display:flex;flex-direction:column;justify-content:center}
+.signup-body h3{font-size:26px;font-weight:800;color:#111;margin-bottom:18px}
+
+.reg-input-box{position:relative;margin-bottom:12px}
+.reg-input-box .field{margin-bottom:0;padding-right:44px}
+.reg-input-box svg{position:absolute;right:16px;top:50%;transform:translateY(-50%);width:16px;height:16px;color:#9a90c0;pointer-events:none}
 
 .signup-bottom{
+  flex:1 1 44%;
   background:linear-gradient(135deg,#a970ff 0%,#7c3ce0 100%);
-  padding:22px 32px 26px;
-  border-radius:40px 40px 0 0;
-  text-align:center;margin-top:14px;
+  padding:30px 26px;
+  border-radius:220px 0 0 220px;
+  text-align:center;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
 }
-.signup-bottom h4{font-size:20px;font-weight:800;color:#fff;margin-bottom:6px}
-.signup-bottom p{font-size:13px;color:rgba(0,0,0,.6);margin-bottom:16px}
+.signup-bottom h4{font-size:22px;font-weight:800;color:#fff;margin-bottom:6px}
+.signup-bottom p{font-size:13px;color:rgba(255,255,255,.75);margin-bottom:16px}
+.signup-bottom .btn-outline-dark{padding:9px 30px}
+
+@media (max-width:650px){
+  .signup-panel{flex-direction:column}
+  .signup-body{padding:24px 22px 0}
+  .signup-bottom{border-radius:36px 36px 0 0;padding:22px 24px 26px;margin-top:14px}
+}
 
 /* ════ APP LAYOUT ════ */
 #app{
@@ -432,7 +451,7 @@ input,textarea{font-family:inherit}
 /* ════════════ RESPONSIVE (tablette / téléphone) ════════════ */
 @media (max-width:780px){
   html,body{overflow:auto}
-  #app{grid-template-columns:1fr;height:100vh}
+  #app{grid-template-columns:1fr;grid-template-rows:1fr;height:100vh}
   #app.sidebar-hidden{grid-template-columns:1fr}
   .main{grid-column:1}
   .sb{position:fixed;top:6px;left:6px;bottom:6px;width:230px;z-index:950;transform:translateX(-115%)}
@@ -444,13 +463,29 @@ input,textarea{font-family:inherit}
   .grid{grid-template-columns:repeat(auto-fill,minmax(105px,1fr))}
   .stats-grid{grid-template-columns:1fr 1fr}
   .fav-grid{grid-template-columns:1fr}
-  .player{flex-wrap:wrap;height:auto;padding:10px;row-gap:8px}
+
+  /* ── Barre de lecture flottante (mobile) ── */
+  .player{
+    position:fixed;
+    left:12px;right:12px;bottom:calc(14px + env(safe-area-inset-bottom));
+    grid-column:unset;grid-row:unset;
+    width:auto;
+    flex-wrap:wrap;height:auto;row-gap:8px;
+    padding:10px 14px;
+    border-radius:20px;
+    background:var(--player-glass);
+    -webkit-backdrop-filter:blur(22px) saturate(160%);
+    backdrop-filter:blur(22px) saturate(160%);
+    border:1px solid var(--player-glass-border);
+    box-shadow:0 16px 40px rgba(0,0,0,.5),0 2px 8px rgba(0,0,0,.25);
+    z-index:900;
+  }
   .pl-left{width:auto;flex:1 1 55%;order:1}
   .pl-right{width:auto;flex:0 0 auto;order:2}
   .vsl{width:56px}
   .pl-center{order:3;flex:1 1 100%;max-width:none}
   .user-name{max-width:80px}
-  .content{padding:14px 14px 90px}
+  .content{padding:14px 14px calc(var(--ph) + 56px)}
 }
 @media (max-width:460px){
   .stats-grid{grid-template-columns:1fr}
@@ -472,7 +507,7 @@ input,textarea{font-family:inherit}
 
 <!-- ════════════ FENÊTRE D'AUTHENTIFICATION (modale) ════════════ -->
 <div id="authModalOverlay">
-  <div class="auth-card">
+  <div class="auth-card" id="authCard">
     <div class="auth-close" onclick="closeAuthModal()">✕</div>
 
     <!-- SIGN IN PANEL -->
@@ -495,11 +530,23 @@ input,textarea{font-family:inherit}
     <!-- SIGN UP PANEL -->
     <div class="auth-panel signup-panel" id="signupPanel">
       <div class="signup-body">
-        <h3>Créer un compte</h3>
-        <input class="field" type="text" placeholder="Nom complet" id="signupName"/>
-        <input class="field" type="email" placeholder="Adresse e-mail" id="signupEmail"/>
-        <input class="field" type="text" placeholder="Nom d'utilisateur" id="signupUser"/>
-        <input class="field" type="password" placeholder="Mot de passe" id="signupPass"/>
+        <h3>Registration</h3>
+        <div class="reg-input-box">
+          <input class="field" type="text" placeholder="Nom d'utilisateur" id="signupUser"/>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+        </div>
+        <div class="reg-input-box">
+          <input class="field" type="text" placeholder="Nom complet" id="signupName"/>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 21v-2a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+        </div>
+        <div class="reg-input-box">
+          <input class="field" type="email" placeholder="Adresse e-mail" id="signupEmail"/>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 4h16v16H4z" opacity="0"/><path d="M22 6 12 13 2 6"/><path d="M2 6h20v12H2z"/></svg>
+        </div>
+        <div class="reg-input-box">
+          <input class="field" type="password" placeholder="Mot de passe" id="signupPass"/>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="4" y="11" width="16" height="9" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>
+        </div>
         <div class="auth-error" id="signupError"></div>
         <button class="btn-main" id="signupBtn" onclick="doSignup()">Créer un compte</button>
       </div>

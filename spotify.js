@@ -31,11 +31,15 @@ function showSignup(){
   document.getElementById('signinPanel').classList.add('slide-up');
   document.getElementById('signupPanel').classList.add('slide-up');
   document.getElementById('signinError').textContent='';
+  const card=document.getElementById('authCard');
+  if(card) card.classList.add('reg-wide');
 }
 function showSignin(){
   document.getElementById('signinPanel').classList.remove('slide-up');
   document.getElementById('signupPanel').classList.remove('slide-up');
   document.getElementById('signupError').textContent='';
+  const card=document.getElementById('authCard');
+  if(card) card.classList.remove('reg-wide');
 }
 function setAuthLoading(on,which){
   const btn=document.getElementById(which==='signin'?'signinBtn':'signupBtn');
