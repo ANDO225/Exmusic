@@ -1,10 +1,15 @@
+
+// ══════════════════════ THÈME (mode sombre / clair) ══════════════════════
 function applyTheme(){
   const theme=localStorage.getItem('sw_theme')||'dark';
   document.documentElement.setAttribute('data-theme',theme);
   const sw=document.getElementById('themeToggle');
   if(sw) sw.classList.toggle('on',theme==='light');
   const quick=document.getElementById('themeQuickBtn');
-  if(quick) quick.textContent = theme==='light' ? 'MODE SOMBRE' : 'MODE CLAIR';
+  if(quick){
+    document.getElementById('themeIconSun').style.display = theme==='light' ? 'none' : '';
+    document.getElementById('themeIconMoon').style.display = theme==='light' ? '' : 'none';
+  }
 }
 function toggleTheme(){
   const cur=localStorage.getItem('sw_theme')||'dark';
@@ -31,15 +36,11 @@ function showSignup(){
   document.getElementById('signinPanel').classList.add('slide-up');
   document.getElementById('signupPanel').classList.add('slide-up');
   document.getElementById('signinError').textContent='';
-  const card=document.getElementById('authCard');
-  if(card) card.classList.add('reg-wide');
 }
 function showSignin(){
   document.getElementById('signinPanel').classList.remove('slide-up');
   document.getElementById('signupPanel').classList.remove('slide-up');
   document.getElementById('signupError').textContent='';
-  const card=document.getElementById('authCard');
-  if(card) card.classList.remove('reg-wide');
 }
 function setAuthLoading(on,which){
   const btn=document.getElementById(which==='signin'?'signinBtn':'signupBtn');
@@ -120,8 +121,8 @@ function renderAuthArea(){
         <span class="user-name">${escapeHtml(currentUser)}</span>
       </div>
       <div class="user-menu" id="userMenu">
-        <div class="user-menu-item" onclick="navTo(document.querySelectorAll('.ni')[4],'params');document.getElementById('userMenu').classList.remove('open')"> Paramètres</div>
-        <div class="user-menu-item" onclick="logout()"> Déconnexion</div>
+        <div class="user-menu-item" onclick="navTo(document.querySelectorAll('.ni')[4],'params');document.getElementById('userMenu').classList.remove('open')">Paramètres</div>
+        <div class="user-menu-item" onclick="logout()">Déconnexion</div>
       </div>`;
   } else {
     el.innerHTML=`<button class="btn-outline-dark" style="border-color:var(--yd);color:var(--yd)" onclick="openAuthModal()">SE CONNECTER</button>`;
@@ -141,7 +142,7 @@ function enterApp(){
   document.getElementById('settingsUser').textContent=currentUser;
   closeAuthModal();
   renderAuthArea();
-  initApp();
+  initApp().then(()=>{ autoRestoreIfNeeded(); updateBackupStatus(); });
 }
 
 function logout(){
@@ -230,7 +231,7 @@ function boot(){
       currentUser=null;
     }
     renderAuthArea();
-    initApp();
+    initApp().then(()=>{ if(currentUser){ autoRestoreIfNeeded(); updateBackupStatus(); } });
   },1400);
 }
 document.addEventListener('DOMContentLoaded',boot);
@@ -242,18 +243,41 @@ let dbPromise=null;
 function getDB(){
   if(dbPromise) return dbPromise;
   dbPromise=new Promise((resolve,reject)=>{
-    const req=indexedDB.open('ANsoundDB',1);
+    const req=indexedDB.open('ANsoundDB',2);
     req.onupgradeneeded=e=>{
       const db=e.target.result;
       if(!db.objectStoreNames.contains('tracks')){
         const store=db.createObjectStore('tracks',{keyPath:'id',autoIncrement:true});
         store.createIndex('username','username',{unique:false});
       }
+      if(!db.objectStoreNames.contains('backups')){
+        db.createObjectStore('backups',{keyPath:'username'});
+      }
     };
     req.onsuccess=e=>resolve(e.target.result);
     req.onerror=e=>reject(e.target.error);
   });
   return dbPromise;
+}
+// Sauvegarde automatique liée au compte : enregistrée directement dans l'application
+// (IndexedDB), donc toujours disponible sans avoir à réimporter un fichier.
+async function dbSaveBackup(username,payload){
+  const db=await getDB();
+  return new Promise((res,rej)=>{
+    const tx=db.transaction('backups','readwrite');
+    const req=tx.objectStore('backups').put({username,payload,savedAt:new Date().toISOString()});
+    req.onsuccess=()=>res();
+    req.onerror=()=>rej(req.error);
+  });
+}
+async function dbGetBackup(username){
+  const db=await getDB();
+  return new Promise((res,rej)=>{
+    const tx=db.transaction('backups','readonly');
+    const req=tx.objectStore('backups').get(username);
+    req.onsuccess=()=>res(req.result||null);
+    req.onerror=()=>rej(req.error);
+  });
 }
 async function dbAddTrack(track){
   const db=await getDB();
@@ -377,7 +401,7 @@ function openPlaylist(i){
 // ══ RENDER : ACCUEIL ══
 function renderHome(){
   const hasTracks=TRACKS.length>0;
-  document.getElementById('heroEyebrow').textContent=hasTracks?' Le plus écouté':' Bienvenue dans ExMUSIC';
+  document.getElementById('heroEyebrow').textContent=hasTracks?'Le plus écouté':'Bienvenue';
   if(hasTracks){
     const top=[...TRACKS].sort((a,b)=>(b.plays||0)-(a.plays||0))[0];
     document.getElementById('heroTitle').textContent=top.title;
@@ -424,7 +448,7 @@ function mkCard(title,sub,col,id){
 }
 
 // ══ ALBUMS (regroupement automatique de la musique ajoutée) ══
-// Regroupe par nom d'album si renseigné (via ✎), sinon par artiste.
+// Regroupe par nom d'album si renseigné (via le bouton Modifier), sinon par artiste.
 function albumGroups(){
   const groups={};
   TRACKS.forEach(t=>{
@@ -446,7 +470,7 @@ function renderAlbums(){
       <div class="card-t center">${escapeHtml(k)}</div>
       <div class="card-s center">${tracks.length} titre(s)</div>
     </div>`;
-  }).join('') : '<div class="empty-hint">Importez de la musique et donnez-lui un album (bouton ✎) pour la regrouper ici.</div>';
+  }).join('') : '<div class="empty-hint">Importez de la musique et donnez-lui un album (bouton Modifier) pour la regrouper ici.</div>';
   document.getElementById('albumCards').innerHTML = keys.length ? cardsHtml : '';
   const albumGridEl=document.getElementById('albumGrid');
   if(albumGridEl) albumGridEl.innerHTML=cardsHtml;
@@ -457,7 +481,7 @@ function openAlbum(encodedKey){
   const tracks=groups[key]||[];
   filteredTracks=tracks;
   currentPlaylistIndex=null;
-  renderTrackList(tracks,'💿 '+key);
+  renderTrackList(tracks,key);
   navTo(null,'lecteur');
 }
 
@@ -511,7 +535,7 @@ function getAudioDuration(file){
   });
 }
 function randomColor(){
-  const palette=['#1a1533','#161229','#1c1440','#140f26','#1e1236','#12102a','#20143a','#160e2e','#1a1240','#100c24'];
+  const palette=['#12271b','#0f2219','#14301f','#0c1f16','#163325','#0d1e17','#183824','#10281c','#122b1e','#0e2018'];
   return palette[Math.floor(Math.random()*palette.length)];
 }
 
@@ -590,6 +614,27 @@ function renderFavs(){
     </div>`).join('') : '<div class="empty-hint">Aucun favori. Cliquez sur le cœur d\'un morceau pour l\'ajouter ici.</div>';
   document.getElementById('statFav').textContent=favs.length;
 }
+function burstStars(el){
+  if(!el || !el.offsetParent) return;
+  el.classList.remove('fav-anim'); void el.offsetWidth; el.classList.add('fav-anim');
+  const r=el.getBoundingClientRect();
+  const cx=r.left+r.width/2, cy=r.top+r.height/2;
+  const n=6;
+  for(let i=0;i<n;i++){
+    const s=document.createElement('span');
+    s.className='fav-particle';
+    s.textContent='★';
+    const ang=(Math.PI*2/n)*i + (Math.random()*.6-.3);
+    const dist=20+Math.random()*16;
+    s.style.left=cx+'px';
+    s.style.top=cy+'px';
+    s.style.setProperty('--dx',(Math.cos(ang)*dist)+'px');
+    s.style.setProperty('--dy',(Math.sin(ang)*dist-12)+'px');
+    s.style.setProperty('--rot',(Math.random()*160-80)+'deg');
+    document.body.appendChild(s);
+    setTimeout(()=>s.remove(),680);
+  }
+}
 function toggleFav(id,btn){
   const t=TRACKS.find(t=>t.id===id);
   if(!t) return;
@@ -597,6 +642,7 @@ function toggleFav(id,btn){
   dbUpdateTrack(t);
   btn.classList.toggle('liked',t.liked);
   btn.querySelector('svg').setAttribute('fill',t.liked?'var(--y)':'none');
+  if(t.liked) burstStars(btn);
   renderFavs();
   if(currentTrack && currentTrack.id===id){
     document.getElementById('pHeart').classList.toggle('liked',t.liked);
@@ -659,7 +705,7 @@ function base64ToBlob(dataUrl){
 async function exportLibrary(evt){
   if(!requireLogin()) return;
   const btn=evt && evt.target;
-  if(btn){ btn.disabled=true; btn.textContent='Préparation…'; }
+  if(btn){ btn.disabled=true; btn.textContent='Sauvegarde…'; }
   try{
     const tracksOut=[];
     for(const t of TRACKS){
@@ -667,17 +713,68 @@ async function exportLibrary(evt){
       tracksOut.push({title:t.title,artist:t.artist,album:t.album,genre:t.genre,note:t.note,fileName:t.fileName,duration:t.duration,liked:t.liked,plays:t.plays,dateAdded:t.dateAdded,col:t.col,oldId:t.id,audioBase64:b64});
     }
     const payload={
-      app:'ANsound', version:1, exportedAt:new Date().toISOString(), user:currentUser,
+      app:'exmusic', version:1, exportedAt:new Date().toISOString(), user:currentUser,
       tracks:tracksOut, playlists:PLAYLISTS, follows:loadFollows()
     };
-    const blob=new Blob([JSON.stringify(payload)],{type:'application/json'});
-    const url=URL.createObjectURL(blob);
-    const a=document.createElement('a');
-    a.href=url; a.download='ansound-backup-'+currentUser+'.json';
-    document.body.appendChild(a); a.click(); a.remove();
-    URL.revokeObjectURL(url);
+    // Enregistrée directement dans l'application (IndexedDB), liée au compte :
+    // aucun fichier à conserver ni à réimporter manuellement.
+    await dbSaveBackup(currentUser,payload);
+    updateBackupStatus();
   } finally {
-    if(btn){ btn.disabled=false; btn.textContent='Exporter'; }
+    if(btn){ btn.disabled=false; btn.textContent='Sauvegarder'; }
+  }
+}
+async function updateBackupStatus(){
+  const el=document.getElementById('backupStatus');
+  if(!el || !currentUser) return;
+  const b=await dbGetBackup(currentUser);
+  if(b){
+    const d=new Date(b.savedAt);
+    el.textContent='Dernière sauvegarde : '+d.toLocaleDateString()+' à '+d.toLocaleTimeString().slice(0,5);
+  } else {
+    el.textContent='Aucune sauvegarde pour l\'instant';
+  }
+}
+// Restaure silencieusement depuis la sauvegarde du compte si la bibliothèque est vide
+// (par ex. après un nettoyage du navigateur) — l'utilisateur n'a rien à importer.
+async function autoRestoreIfNeeded(){
+  if(!currentUser) return;
+  try{
+    const backup=await dbGetBackup(currentUser);
+    if(!backup || !backup.payload || !Array.isArray(backup.payload.tracks)) return;
+    const existing=await dbGetTracksForUser(currentUser);
+    if(existing.length>0) return; // déjà des musiques, rien à restaurer
+    if(backup.payload.tracks.length===0) return;
+    await restoreFromPayload(backup.payload);
+    await initApp();
+    alert('Bibliothèque restaurée automatiquement depuis votre sauvegarde ('+backup.payload.tracks.length+' morceau(x)).');
+  }catch(e){ /* silencieux */ }
+}
+async function restoreFromPayload(data){
+  const idMap={};
+  for(const t of data.tracks){
+    let blob=null;
+    if(t.audioBase64){ blob=await base64ToBlob(t.audioBase64); }
+    const track={
+      username:currentUser, title:t.title||'Sans titre', artist:t.artist||'', album:t.album||'',
+      genre:t.genre||'', note:t.note||'', fileName:t.fileName||'', blob, duration:t.duration||0,
+      liked:!!t.liked, plays:t.plays||0, dateAdded:t.dateAdded||Date.now(), col:t.col||randomColor()
+    };
+    const newId=await dbAddTrack(track);
+    if(t.oldId!==undefined) idMap[t.oldId]=newId;
+  }
+  if(Array.isArray(data.playlists)){
+    const restoredPlaylists=data.playlists.map(p=>({
+      id:p.id||Date.now()+Math.random(), name:p.name,
+      trackIds:(p.trackIds||[]).map(oid=>idMap[oid]).filter(id=>id!==undefined),
+      col:p.col||randomColor()
+    }));
+    PLAYLISTS=[...PLAYLISTS,...restoredPlaylists];
+    savePlaylists(PLAYLISTS);
+  }
+  if(Array.isArray(data.follows)){
+    const existing=loadFollows();
+    saveFollows([...new Set([...existing,...data.follows])]);
   }
 }
 async function importLibrary(file){
@@ -686,41 +783,16 @@ async function importLibrary(file){
     const text=await file.text();
     const data=JSON.parse(text);
     if(!data || !Array.isArray(data.tracks)) throw new Error('Fichier invalide');
-    const idMap={};
-    for(const t of data.tracks){
-      let blob=null;
-      if(t.audioBase64){ blob=await base64ToBlob(t.audioBase64); }
-      const track={
-        username:currentUser, title:t.title||'Sans titre', artist:t.artist||'', album:t.album||'',
-        genre:t.genre||'', note:t.note||'', fileName:t.fileName||'', blob, duration:t.duration||0,
-        liked:!!t.liked, plays:t.plays||0, dateAdded:t.dateAdded||Date.now(), col:t.col||randomColor()
-      };
-      const newId=await dbAddTrack(track);
-      if(t.oldId!==undefined) idMap[t.oldId]=newId;
-    }
-    if(Array.isArray(data.playlists)){
-      const restoredPlaylists=data.playlists.map(p=>({
-        id:p.id||Date.now()+Math.random(), name:p.name,
-        trackIds:(p.trackIds||[]).map(oid=>idMap[oid]).filter(id=>id!==undefined),
-        col:p.col||randomColor()
-      }));
-      PLAYLISTS=[...PLAYLISTS,...restoredPlaylists];
-      savePlaylists(PLAYLISTS);
-    }
-    if(Array.isArray(data.follows)){
-      const existing=loadFollows();
-      saveFollows([...new Set([...existing,...data.follows])]);
-    }
+    await restoreFromPayload(data);
+    await dbSaveBackup(currentUser,data);
     await initApp();
-    alert('Sauvegarde restaurée : '+data.tracks.length+' morceau(x) importé(s).');
+    updateBackupStatus();
   } catch(err){
     alert("Impossible de lire ce fichier de sauvegarde : "+err.message);
-  } finally {
-    document.getElementById('backupInput').value='';
   }
 }
 
-// ══ SUGGESTIONS D'ARTISTES (présentées par la personne / la communauté ANsound) ══
+// ══ SUGGESTIONS D'ARTISTES (présentées par la personne / la communauté exmusic) ══
 // Sélection éditoriale d'exemples ; l'utilisateur peut s'abonner pour les retrouver plus tard.
 const SUGGESTED_ARTISTS=[
   {name:'Indila', bio:"Chanteuse française d'origine malgache, révélée par « Dernière Danse ».", col:'#7a1fa8'},
@@ -752,7 +824,7 @@ function renderMyFollows(){
   const follows = currentUser ? loadFollows() : [];
   wrap.innerHTML = follows.length ? follows.map(name=>{
     const a=SUGGESTED_ARTISTS.find(ar=>ar.name===name);
-    const col=a?a.col:'#544777';
+    const col=a?a.col:'#2b3d33';
     return `<div class="s-row">
       <div class="s-row-left">
         <div class="s-icon" style="background:${col};color:#fff;font-weight:800">${escapeHtml(name.substring(0,2).toUpperCase())}</div>
@@ -778,7 +850,7 @@ function renderGenreChips(){
   const wrap=document.getElementById('genreChips');
   wrap.innerHTML = genres.length
     ? genres.map(g=>`<div class="chip" onclick="filterByGenre('${escapeHtml(g)}')">${escapeHtml(g)}</div>`).join('')
-    : '<div class="empty-hint">Ajoutez un genre à vos morceaux (bouton ✎) pour les retrouver ici.</div>';
+    : '<div class="empty-hint">Ajoutez un genre à vos morceaux (bouton Modifier) pour les retrouver ici.</div>';
 }
 function filterTracks(q){
   const ql=q.toLowerCase();
@@ -815,7 +887,7 @@ function sortTracks(by){
 function renderTrackList(tracks, title){
   document.getElementById('plTitle').textContent=title||'Ma Musique';
   const btn=document.getElementById('plActionBtn');
-  btn.textContent = currentPlaylistIndex===null ? '➕ Importer de la musique' : ' Gérer les morceaux';
+  btn.textContent = currentPlaylistIndex===null ? 'Importer de la musique' : 'Gérer les morceaux';
   document.getElementById('trackList').innerHTML = tracks.length ? tracks.map((t,i)=>`
     <div class="tr${currentTrack&&currentTrack.id===t.id?' playing':''}" id="tr-${t.id}" onclick="playTrackById(${t.id})">
       <div class="tr-num">${i+1}</div>
@@ -824,7 +896,7 @@ function renderTrackList(tracks, title){
       <div class="tr-meta">
         <div class="tr-title">${escapeHtml(t.title)}</div>
         <div class="tr-artist">${escapeHtml(t.artist||'Artiste inconnu')}${t.genre?' · '+escapeHtml(t.genre):''}</div>
-        ${t.note?`<div class="tr-note">💬 ${escapeHtml(t.note)}</div>`:''}
+        ${t.note?`<div class="tr-note">${escapeHtml(t.note)}</div>`:''}
       </div>
       <div class="tr-actions">
         <div class="tr-dur">${fmt(t.duration)}</div>
@@ -873,6 +945,7 @@ function playTrackById(id){
 }
 function loadAndPlayTrack(t){
   currentTrack=t;
+  document.getElementById('playerBar').classList.add('show');
   if(t.blob){
     const url=URL.createObjectURL(t.blob);
     audioEl.src=url;
@@ -956,9 +1029,11 @@ function toggleRepeat(){
 function toggleHeart(){
   const h=document.getElementById('pHeart');
   h.classList.toggle('liked');
-  document.getElementById('npHeart').classList.toggle('liked',h.classList.contains('liked'));
+  const liked=h.classList.contains('liked');
+  document.getElementById('npHeart').classList.toggle('liked',liked);
+  if(liked){ burstStars(h); burstStars(document.getElementById('npHeart')); }
   if(currentTrack){
-    currentTrack.liked=h.classList.contains('liked');
+    currentTrack.liked=liked;
     dbUpdateTrack(currentTrack);
     renderFavs();
   }
@@ -968,9 +1043,10 @@ function setVol(v){ document.getElementById('volS').style.setProperty('--vol',v+
 // ══ AIDES ══
 function fmt(s){ if(!s||isNaN(s)) return '0:00'; const m=Math.floor(s/60), sec=Math.floor(s%60); return m+':'+(sec<10?'0':'')+sec; }
 function svgAlbum(col,letter){
-  return `<svg viewBox="0 0 50 50" xmlns="http://www.w3.org/2000/svg"><rect width="50" height="50" fill="${col||'#1a1533'}"/><circle cx="25" cy="25" r="16" fill="none" stroke="#a970ff" stroke-width=".8" opacity=".4"/><circle cx="25" cy="25" r="7" fill="#a970ff" opacity=".5"/><text x="25" y="14" font-size="9" font-weight="700" text-anchor="middle" fill="#a970ff" opacity=".7">${(letter||'♪').toString()[0].toUpperCase()}</text></svg>`;
+  return `<svg viewBox="0 0 50 50" xmlns="http://www.w3.org/2000/svg"><rect width="50" height="50" fill="${col||'#132a1c'}"/><circle cx="25" cy="25" r="16" fill="none" stroke="#1ed760" stroke-width=".8" opacity=".4"/><circle cx="25" cy="25" r="7" fill="#1ed760" opacity=".5"/><text x="25" y="14" font-size="9" font-weight="700" text-anchor="middle" fill="#1ed760" opacity=".7">${(letter||'♪').toString()[0].toUpperCase()}</text></svg>`;
 }
 function escapeHtml(s){
   return (s||'').toString().replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
 document.getElementById('volS').style.setProperty('--vol','65%');
+
